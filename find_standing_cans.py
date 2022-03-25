@@ -20,15 +20,12 @@ class PixCmConverter:
     assumptions: this ratio is linear in the distance from the "floor".
     """
 
-    def __init__(self, depth_frame, image_shape):
-        self.depth_frame = depth_frame
+    def __init__(self, pix_depth_frame, image_shape, depth_matrix):
+        self.depth_frame = pix_depth_frame
         self.height, self.width = image_shape
 
         # find distance from floor
-        self.depth_mat = np.array(
-            [[self.depth_frame.get_distance(j, i) for j in range(self.width // 4, 3 * self.width // 4)] for i in
-             range(self.height // 4, 3 * self.height // 4)]
-        )
+        self.depth_mat = depth_matrix[self.width//4:3*self.width//4, self.height//4:3*self.height//4]
         self.dist_from_floor = np.max(self.depth_mat)
 
         # Given the assumptions and empirical measurements, this is the pix:cm ratio
@@ -43,7 +40,7 @@ class TinsIdentifier:
     this class is responsible for identifying the standing cans using hough transform for circles
     """
     DP = 1.5
-    CANNY1 = 200
+    CANNY1 = 300
     CANNY2 = 50
     MIN_CAN_RADIUS = 2  # in cm
     MAX_CAN_RADIUS = 10  # in cm
@@ -55,6 +52,13 @@ class TinsIdentifier:
                  pixels_for_mean=PIXELS_FOR_MEAN):
         self.color_image = color_image
         self.depth_frame = depth_frame
+
+        height, width = self.color_image.shape[:2]
+        self.depth_mat = self.depth_mat = np.array(
+            [[self.depth_frame.get_distance(j, i) for j in range(width)] for i in
+             range(height)]
+        )
+
         self.pixels_for_mean = pixels_for_mean
         self.big_circles = None
         self.dp = dp
@@ -62,8 +66,7 @@ class TinsIdentifier:
         self.canny2 = canny2
 
         # find distances matrix (depth_mat) and find pix:cm ratio
-        pix_cm_converter = PixCmConverter(self.depth_frame, self.color_image.shape[:2])
-        self.depth_mat = pix_cm_converter.depth_mat
+        pix_cm_converter = PixCmConverter(self.depth_frame, self.color_image.shape[:2], self.depth_mat)
         self.pix_per_cm = pix_cm_converter.pix_per_cm
         self.cm_per_pix = pix_cm_converter.cm_per_pix
 
@@ -78,6 +81,7 @@ class TinsIdentifier:
         for x, y, r in circles:
             img = cv2.circle(self.color_image, (x, y), r, (0, 255, 0), 1)
         cv2.imshow("img", img)
+        cv2.imshow("canny", cv2.Canny(self.gray_image, self.canny1, self.canny2))
         cv2.setMouseCallback("img", mouse_points)
         cv2.waitKey(0)
 
@@ -96,17 +100,21 @@ class TinsIdentifier:
         x, y = c
         pix_for_mean = self.pixels_for_mean
         height, width = self.depth_mat.shape
-        surface = self.depth_mat[
-                  max(x - pix_for_mean, 0):min(x + pix_for_mean, width),
-                  max(y - pix_for_mean, 0):min(y + pix_for_mean, height)
+        surface = self.depth_mat.copy()
+        surface = surface[
+                  max(y - pix_for_mean, 0):min(y + pix_for_mean, height),
+                  max(x - pix_for_mean, 0):min(x + pix_for_mean, width)
                   ]
-        surface[(surface > np.percentile(surface, 75)) | (surface < np.percentile(surface, 25))] = np.median(surface)
-        return np.mean(surface)
+        surface = np.nan_to_num(surface)
+        # surface[(surface > np.percentile(surface, 75)) | (surface < np.percentile(surface, 25))] = np.median(surface)
+        # result = np.mean(surface)
+        result = np.median(surface)
+        return result
 
     def find_most_upper_can(self):
         if self.big_circles is None:
             return None
-        cans_distances = np.apply_along_axis(self.__get_mean_distance, 1, self.big_circles[:, :2])
+        cans_distances = np.apply_along_axis(lambda c: self.__get_mean_distance(c), 1, self.big_circles[:, :2])
         return self.big_circles[np.argmin(cans_distances)]
 
 
@@ -163,4 +171,3 @@ if __name__ == "__main__":
     ti = TinsIdentifier(color_image, depth_frame)
     ti.get_cans_circles()
     upper_can = ti.find_most_upper_can()
-    print(upper_can)
