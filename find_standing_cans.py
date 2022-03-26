@@ -246,31 +246,31 @@ class BitsIdentifier:
 
 if __name__ == "__main__":
     # ===================== NOT in the code =========================
-    # color_image = cv2.imread("colored_image.jpg")
-    # masked_image = cv2.imread("masked_image.jpg")
-    # gray_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2GRAY)
-    # for i in range(100, 500, 10):
-    #     for j in range(10, 60, 5):
-    #         canny = cv2.Canny(masked_image, i, j)
-    #         dir = "./canny_tests/" + ("_".join(['canny1', str(i), 'canny2', str(j)])) + ".jpg"
-    #         cv2.imwrite(dir, canny)
+    color_image = cv2.imread("colored_image.jpg")
+    masked_image = cv2.imread("masked_image.jpg")
+    gray_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2GRAY)
+    for i in range(80, 500, 10):
+        for j in range(10, 60, 2):
+            canny = cv2.Canny(masked_image, i, j)
+            dir = "./canny_tests/" + ("_".join(['canny1', str(i), 'canny2', str(j)])) + ".jpg"
+            cv2.imwrite(dir, canny)
     # ===================== END NOT in the code =====================
 
-    cam = realsense_depth.DepthCamera()
-    _, depth_image, color_image, depth_frame, color_frame = cam.get_frame(align_image=True)
-    ti = TinsIdentifier(color_image, depth_frame)
-    ti.get_cans_circles()
-    upper_can = ti.find_upper_can()
-    bi = BitsIdentifier(color_image, upper_can, ti.pix_cm_converter)
-    bit = bi.get_bit_circle()
-    sweet_spot = bi.get_sweet_spot(bit)
-    print(sweet_spot)
-    # ===================== NOT in the code =========================
-    print(bit)
-    img = color_image.copy()
-    img = cv2.circle(img, bit[:2], bit[2], (0, 255, 0), 2)
-    img = cv2.circle(img, tuple(sweet_spot), 3, (0, 255, 255), -1)
-    cv2.imshow("img", img)
-    cv2.waitKey(0)
-
-    # ===================== END NOT in the code =====================
+    # cam = realsense_depth.DepthCamera()
+    # _, depth_image, color_image, depth_frame, color_frame = cam.get_frame(align_image=True)
+    # ti = TinsIdentifier(color_image, depth_frame)
+    # ti.get_cans_circles()
+    # upper_can = ti.find_upper_can()
+    # bi = BitsIdentifier(color_image, upper_can, ti.pix_cm_converter)
+    # bit = bi.get_bit_circle()
+    # sweet_spot = bi.get_sweet_spot(bit)
+    # print(sweet_spot)
+    # # ===================== NOT in the code =========================
+    # print(bit)
+    # img = color_image.copy()
+    # img = cv2.circle(img, bit[:2], bit[2], (0, 255, 0), 2)
+    # img = cv2.circle(img, tuple(sweet_spot), 3, (0, 255, 255), -1)
+    # cv2.imshow("img", img)
+    # cv2.waitKey(0)
+    #
+    # # ===================== END NOT in the code =====================
