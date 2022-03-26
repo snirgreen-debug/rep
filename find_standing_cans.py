@@ -5,7 +5,7 @@ import realsense_depth
 
 
 # ============= NOT IN THE FINAL CODE!!!! =================
-def mouse_points(event, cursor_x, cursor_y):
+def mouse_points(event, cursor_x, cursor_y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         print(cursor_x, cursor_y)
 
@@ -213,7 +213,7 @@ class BitsIdentifier:
         xs = self.__get_quad_formula_result(
             1 + np.power(m, 2),
             2 * (m * c - m * b - a),
-            np.power(a, 2) + np.power(b, 2) + np.power(c, 2) - np.power(r, 2) - b * c
+            np.power(a, 2) + np.power(b, 2) + np.power(c, 2) - np.power(r, 2) - 2 * b * c
         )
         ys = tuple(map(lambda x: m * x + c, xs))
         return tuple(zip(xs, ys))
@@ -236,10 +236,10 @@ class BitsIdentifier:
         can_ips = np.array(self.__get_intersection_points(can_a, can_b, can_r, m, c))
         distances = np.apply_along_axis(lambda i: np.linalg.norm(i - bit_ip1), 1, can_ips)
         can_point = can_ips[np.argmax(distances)]
-        distances = np.apply_along_axis(lambda i: np.linalg.norm(i - can_point), 1, bit_ips)
-        bit_point = bit_ips[np.argmax(distances)]
+        # distances = np.apply_along_axis(lambda i: np.linalg.norm(i - can_point), 1, bit_ips)
+        # bit_point = bit_ips[np.argmax(distances)]
 
-        return (can_point + bit_point) / 2
+        return ((can_point + self.can[:2]) / 2).astype(int)
 
 
 if __name__ == "__main__":
@@ -267,6 +267,7 @@ if __name__ == "__main__":
     print(bit)
     img = color_image.copy()
     img = cv2.circle(img, bit[:2], bit[2], (0, 255, 0), 2)
+    img = cv2.circle(img, tuple(sweet_spot), 3, (0, 255, 255), -1)
     cv2.imshow("img", img)
     cv2.waitKey(0)
 
