@@ -119,8 +119,8 @@ class TinsIdentifier:
 
 class BitsIdentifier:
     DP = [1.4, 1.5, 1.6]
-    CANNY1 = range(150, 250, 10)
-    CANNY2 = range(35, 65, 5)
+    CANNY1 = range(90, 110, 2)
+    CANNY2 = range(15, 25, 1)
     MIN_CAN_RADIUS = 1  # in px
     MAX_CAN_RADIUS = 1  # in cm
     MIN_DIST_BETWEEN_CIRCLES = 4  # in cm
@@ -144,19 +144,23 @@ class BitsIdentifier:
         mask = np.zeros(gray_image.shape, np.uint8)
         mask = cv2.circle(mask, self.can[:2], self.can[2], 1, -1)
         return mask * gray_image
+
     # ===================== NOT in the code =========================
-    def show_circles(self, circles, mask = None):
+    def show_circles(self, circles, mask=None):
         img = mask if mask is not None else self.color_image.copy()
         for x, y, r in circles:
             img = cv2.circle(self.color_image, (x, y), r, (0, 255, 0), 1)
         cv2.imshow("img", img)
-        cv2.imshow("canny", cv2.Canny(img, self.canny1, self.canny2))
+        c1, c2 = np.random.choice(self.canny1s), np.random.choice(self.canny2s)
+        cv2.imshow("canny", cv2.Canny(img, c1, c2))
         cv2.setMouseCallback("img", mouse_points)
         cv2.setMouseCallback("canny", mouse_points)
         cv2.waitKey(0)
 
-    def get_bit_circle(self, circle):
-        masked_image = self.set_mask(circle).copy()
+    # ===================== END NOT in the code =====================
+
+    def get_bit_circle(self):
+        masked_image = self.set_mask().copy()
         small_circles = None
 
         # Run HoughCircle with different parameters and get the most frequent circles, which is probably the bit.
@@ -173,19 +177,23 @@ class BitsIdentifier:
                 small_circles, current_small_circles
             ))
 
+        if small_circles is None:
+            return None
+
         # Get the most frequent small circles
         unique_circles, unique_count = np.unique(small_circles, axis=0, return_counts=True)
         unique_circles = unique_circles[unique_count == np.max(unique_count)]
 
         # Find most distant circle and return it
-        circle_origin = np.array(circle[:2])
+        circle_origin = np.array(self.can[:2])
         small_origins = unique_circles[:, :2]
         distances = np.apply_along_axis(lambda i: np.linalg.norm(i - circle_origin), 1, small_origins)
-        bit = small_origins[np.argmax(distances)]
-        return bit
+        can_bit = unique_circles[np.argmax(distances)]
+        return can_bit
 
 
 if __name__ == "__main__":
+    # ===================== NOT in the code =========================
     # color_image = cv2.imread("colored_image.jpg")
     # masked_image = cv2.imread("masked_image.jpg")
     # gray_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2GRAY)
@@ -194,7 +202,7 @@ if __name__ == "__main__":
     #         canny = cv2.Canny(masked_image, i, j)
     #         dir = "./canny_tests/" + ("_".join(['canny1', str(i), 'canny2', str(j)])) + ".jpg"
     #         cv2.imwrite(dir, canny)
-
+    # ===================== END NOT in the code =====================
 
     cam = realsense_depth.DepthCamera()
     _, depth_image, color_image, depth_frame, color_frame = cam.get_frame(align_image=True)
@@ -203,3 +211,10 @@ if __name__ == "__main__":
     upper_can = ti.find_upper_can()
     bi = BitsIdentifier(color_image, upper_can, ti.pix_cm_converter)
     bit = bi.get_bit_circle()
+    # ===================== NOT in the code =========================
+    print(bit)
+    img = color_image.copy()
+    img = cv2.circle(img, bit[:2], bit[2], (0, 255, 0), 2)
+    cv2.imshow("img", img)
+    cv2.waitKey(0)
+    # ===================== END NOT in the code =====================
