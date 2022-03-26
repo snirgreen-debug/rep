@@ -222,6 +222,8 @@ class BitsIdentifier:
         """
         Find the best point to lift the can
         """
+        if bit_circle is None:
+            return self.can[:2]
         can_a, can_b, can_r = self.can
         bit_a, bit_b, bit_r = bit_circle
 
