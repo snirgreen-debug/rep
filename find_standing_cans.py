@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
-import yaml
 import numpy as np
-import argparse
+import itertools
 import cv2
 import realsense_depth
 
@@ -25,7 +24,7 @@ class PixCmConverter:
         self.height, self.width = image_shape
 
         # find distance from floor
-        self.depth_mat = depth_matrix[self.width//4:3*self.width//4, self.height//4:3*self.height//4]
+        self.depth_mat = depth_matrix[self.width // 4:3 * self.width // 4, self.height // 4:3 * self.height // 4]
         self.dist_from_floor = np.max(self.depth_mat)
 
         # Given the assumptions and empirical measurements, this is the pix:cm ratio
@@ -119,22 +118,22 @@ class TinsIdentifier:
 
 
 class BitsIdentifier:
-    DP = 1.5
-    CANNY1 = 200
-    CANNY2 = 50
+    DP = [1.4, 1.5, 1.6]
+    CANNY1 = range(150, 250, 10)
+    CANNY2 = range(35, 65, 5)
     MIN_CAN_RADIUS = 1  # in px
     MAX_CAN_RADIUS = 1  # in cm
     MIN_DIST_BETWEEN_CIRCLES = 4  # in cm
 
-    def __init__(self, color_image, circles, pix_cm_converter, color_code=cv2.COLOR_RGB2GRAY, dp=DP, canny1=CANNY1,
-                 canny2=CANNY2, min_can_radius_in_pix=MIN_CAN_RADIUS, max_can_radius_in_cm=MAX_CAN_RADIUS,
+    def __init__(self, color_image, circles, pix_cm_converter, color_code=cv2.COLOR_RGB2GRAY, dps=DP, canny1s=CANNY1,
+                 canny2s=CANNY2, min_can_radius_in_pix=MIN_CAN_RADIUS, max_can_radius_in_cm=MAX_CAN_RADIUS,
                  min_dist_between_circles_in_cm=MIN_DIST_BETWEEN_CIRCLES):
         self.color_image = color_image
         self.gray_image = cv2.cvtColor(self.color_image, color_code)
         self.circles = circles
-        self.dp = dp
-        self.canny1 = canny1
-        self.canny2 = canny2
+        self.dps = dps
+        self.canny1s = canny1s
+        self.canny2s = canny2s
         self.pix_cm_converter = pix_cm_converter
         self.min_can_radius = min_can_radius_in_pix
         self.max_can_radius = self.pix_cm_converter.pix_per_cm(max_can_radius_in_cm)
@@ -148,18 +147,29 @@ class BitsIdentifier:
 
     def get_bit_circle(self, circle):
         masked_image = self.set_mask(circle).copy()
-        small_circles = cv2.HoughCircles(masked_image, cv2.HOUGH_GRADIENT, self.dp, self.min_dist_between_circles,
-                                         param1=self.canny1, param2=self.canny2,
-                                         minRadius=self.min_can_radius, maxRadius=self.max_can_radius)
+        small_circles = None
 
-        # Could not find any bits
-        if small_circles is None or len(small_circles) == 0:
-            return None
-        small_circles = small_circles.astype(int)[0]
+        # Run HoughCircle with different parameters and get the most frequent circles, which is probably the bit.
+        for dp, canny1, canny2 in itertools.product(self.dps, self.canny1s, self.canny2s):
+            current_small_circles = cv2.HoughCircles(masked_image, cv2.HOUGH_GRADIENT, dp,
+                                                     self.min_dist_between_circles,
+                                                     param1=canny1, param2=canny2,
+                                                     minRadius=self.min_can_radius, maxRadius=self.max_can_radius)
 
-        # find most distant circle and return it
+            if current_small_circles is None or len(current_small_circles) == 0:
+                continue
+            current_small_circles = current_small_circles.astype(int)[0]
+            small_circles = current_small_circles if small_circles is None else np.concatenate((
+                small_circles, current_small_circles
+            ))
+
+        # Get the most frequent small circles
+        unique_circles, unique_count = np.unique(small_circles, axis=0, return_counts=True)
+        unique_circles = unique_circles[unique_count == np.max(unique_count)]
+
+        # Find most distant circle and return it
         circle_origin = np.array(circle[:2])
-        small_origins = small_circles[:, :2]
+        small_origins = unique_circles[:, :2]
         distances = np.apply_along_axis(lambda i: np.linalg.norm(i - circle_origin), 1, small_origins)
         bit = small_origins[np.argmax(distances)]
         return bit
