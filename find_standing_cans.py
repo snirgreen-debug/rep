@@ -40,8 +40,8 @@ class TinsIdentifier:
     this class is responsible for identifying the standing cans using hough transform for circles
     """
     DP = 1.5
-    CANNY1 = 300
-    CANNY2 = 50
+    CANNY1 = 250
+    CANNY2 = 45
     MIN_CAN_RADIUS = 2  # in cm
     MAX_CAN_RADIUS = 10  # in cm
     MIN_DIST_BETWEEN_CIRCLES = 7  # in cm
@@ -66,9 +66,9 @@ class TinsIdentifier:
         self.canny2 = canny2
 
         # find distances matrix (depth_mat) and find pix:cm ratio
-        pix_cm_converter = PixCmConverter(self.depth_frame, self.color_image.shape[:2], self.depth_mat)
-        self.pix_per_cm = pix_cm_converter.pix_per_cm
-        self.cm_per_pix = pix_cm_converter.cm_per_pix
+        self.pix_cm_converter = PixCmConverter(self.depth_frame, self.color_image.shape[:2], self.depth_mat)
+        self.pix_per_cm = self.pix_cm_converter.pix_per_cm
+        self.cm_per_pix = self.pix_cm_converter.cm_per_pix
 
         # calculate distances in pixels
         self.min_can_radius = int(self.pix_per_cm(min_can_radius))
@@ -111,7 +111,7 @@ class TinsIdentifier:
         result = np.median(surface)
         return result
 
-    def find_most_upper_can(self):
+    def find_upper_can(self):
         if self.big_circles is None:
             return None
         cans_distances = np.apply_along_axis(lambda c: self.__get_mean_distance(c), 1, self.big_circles[:, :2])
@@ -120,45 +120,64 @@ class TinsIdentifier:
 
 class BitsIdentifier:
     DP = 1.5
-    CANNY1 = 200
-    CANNY2 = 50
+    CANNY1 = 100
+    CANNY2 = 20
     MIN_CAN_RADIUS = 1  # in px
     MAX_CAN_RADIUS = 1  # in cm
     MIN_DIST_BETWEEN_CIRCLES = 4  # in cm
 
-    def __init__(self, color_image, circles, pix_cm_converter, color_code=cv2.COLOR_RGB2GRAY, dp=DP, canny1=CANNY1,
+    def __init__(self, color_image, can, pix_cm_converter, color_code=cv2.COLOR_RGB2GRAY, dp=DP, canny1=CANNY1,
                  canny2=CANNY2, min_can_radius_in_pix=MIN_CAN_RADIUS, max_can_radius_in_cm=MAX_CAN_RADIUS,
                  min_dist_between_circles_in_cm=MIN_DIST_BETWEEN_CIRCLES):
         self.color_image = color_image
         self.gray_image = cv2.cvtColor(self.color_image, color_code)
-        self.circles = circles
+        self.can = can
         self.dp = dp
         self.canny1 = canny1
         self.canny2 = canny2
         self.pix_cm_converter = pix_cm_converter
         self.min_can_radius = min_can_radius_in_pix
-        self.max_can_radius = self.pix_cm_converter.pix_per_cm(max_can_radius_in_cm)
-        self.min_dist_between_circles = self.pix_cm_converter.pix_per_cm(min_dist_between_circles_in_cm)
+        self.max_can_radius = int(self.pix_cm_converter.pix_per_cm(max_can_radius_in_cm))
+        self.min_dist_between_circles = int(self.pix_cm_converter.pix_per_cm(min_dist_between_circles_in_cm))
 
-    def set_mask(self, circle):
+    def set_mask(self):
         gray_image = self.gray_image.copy()
         mask = np.zeros(gray_image.shape, np.uint8)
-        mask = cv2.circle(mask, circle[:2], circle[2], 1, -1)
+        mask = cv2.circle(mask, self.can[:2], self.can[2], 1, -1)
         return mask * gray_image
+    # ===================== NOT in the code =========================
+    def show_circles(self, circles, mask = None):
+        img = mask if mask is not None else self.color_image.copy()
+        for x, y, r in circles:
+            img = cv2.circle(self.color_image, (x, y), r, (0, 255, 0), 1)
+        cv2.imshow("img", img)
+        cv2.imshow("canny", cv2.Canny(img, self.canny1, self.canny2))
+        cv2.setMouseCallback("img", mouse_points)
+        cv2.setMouseCallback("canny", mouse_points)
+        cv2.waitKey(0)
 
-    def get_bit_circle(self, circle):
-        masked_image = self.set_mask(circle).copy()
+    # ===================== END NOT in the code =========================
+    def get_bit_circle(self):
+        masked_image = self.set_mask().copy()
         small_circles = cv2.HoughCircles(masked_image, cv2.HOUGH_GRADIENT, self.dp, self.min_dist_between_circles,
                                          param1=self.canny1, param2=self.canny2,
                                          minRadius=self.min_can_radius, maxRadius=self.max_can_radius)
 
         # Could not find any bits
         if small_circles is None or len(small_circles) == 0:
+            # ===================== NOT in the code =========================
+            self.show_circles([], masked_image.copy())
+            # ===================== END NOT in the code =====================
             return None
         small_circles = small_circles.astype(int)[0]
 
+        # ===================== NOT in the code =========================
+        self.show_circles(small_circles)
+        print(small_circles)
+        # ===================== END NOT in the code =====================
+
         # find most distant circle and return it
-        circle_origin = np.array(circle[:2])
+        circle_origin = np.array(self.can[:2])
         small_origins = small_circles[:, :2]
         distances = np.apply_along_axis(lambda i: np.linalg.norm(i - circle_origin), 1, small_origins)
         bit = small_origins[np.argmax(distances)]
@@ -166,8 +185,20 @@ class BitsIdentifier:
 
 
 if __name__ == "__main__":
+    # color_image = cv2.imread("colored_image.jpg")
+    # masked_image = cv2.imread("masked_image.jpg")
+    # gray_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2GRAY)
+    # for i in range(100, 500, 10):
+    #     for j in range(10, 60, 5):
+    #         canny = cv2.Canny(masked_image, i, j)
+    #         dir = "./canny_tests/" + ("_".join(['canny1', str(i), 'canny2', str(j)])) + ".jpg"
+    #         cv2.imwrite(dir, canny)
+
+
     cam = realsense_depth.DepthCamera()
     _, depth_image, color_image, depth_frame, color_frame = cam.get_frame(align_image=True)
     ti = TinsIdentifier(color_image, depth_frame)
     ti.get_cans_circles()
-    upper_can = ti.find_most_upper_can()
+    upper_can = ti.find_upper_can()
+    bi = BitsIdentifier(color_image, upper_can, ti.pix_cm_converter)
+    bit = bi.get_bit_circle()
